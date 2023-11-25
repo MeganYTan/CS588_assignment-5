@@ -82,7 +82,11 @@ type SearchResult struct {
 func getLastNDayGitHubIssues(topic string, days int) ([]GitHubIssue, error) {
     since := time.Now().AddDate(0, 0, -days).Format("2006-01-02")
     url := fmt.Sprintf("https://api.github.com/search/issues?q=%s+type:issue+created:>=%s", topic, since)
-
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        log.Println("error creating request: %v", err)
+        return nil, err
+    }
     apiToken := "your_github_api_token"
     req.Header.Set("Authorization", "token " + apiToken)
     resp, err := http.DefaultClient.Do(req)
