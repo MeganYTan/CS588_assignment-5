@@ -16,10 +16,12 @@ steps:
   args: ['build', '-t', 'gcr.io/assignment-5-406009/go-microservice','.']
 - name: "gcr.io/cloud-builders/docker"
   args: ['push', 'gcr.io/assignment-5-406009/go-microservice']
-  
+# deploy go micro service
 - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
   entrypoint: gcloud
   args: ['run', 'deploy','go-microservice', '--image','gcr.io/assignment-5-406009/go-microservice', '--region','us-central1', '--add-cloudsql-instances', 'assignment-5-406009:us-central1:mypostgres','--platform','managed', '--port','8080', '--allow-unauthenticated']
+
+# for prometheus
 images:
 - gcr.io/assignment-5-406009/go-microservice
 - gcr.io/assignment-5-406009/pgadmin
