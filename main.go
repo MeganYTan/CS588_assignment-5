@@ -76,27 +76,6 @@ type SearchResult struct {
 
 
 
-// Function to fetch data from StackOverflow
-func fetchStackOverflowData(query string) ([]StackOverflowPost, error) {
-	start := time.Now()
-    defer func() {
-        apiCalls.With(prometheus.Labels{"api": "stackoverflow"}).Inc()
-        apiCallDuration.With(prometheus.Labels{"api": "stackoverflow"}).Observe(time.Since(start).Seconds())
-    }()
-    url := fmt.Sprintf("https://api.stackexchange.com/2.3/search?order=desc&sort=activity&intitle=%s&site=stackoverflow", query)
-    resp, err := http.Get(url)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
-
-    var result StackOverflowResponse
-    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-        return nil, err
-    }
-
-    return result.Items, nil // This now returns []StackOverflowPost, matching the function's signature
-}
 
 
 // getLastNDayGitHubIssues fetches issues related to a topic created in the last N days.

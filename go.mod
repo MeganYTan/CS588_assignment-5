@@ -1,6 +1,6 @@
 module assignment_5
 
-go 1.21.0
+go 1.16
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
