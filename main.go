@@ -238,6 +238,17 @@ func main() {
     }
     defer db.Close()
 
+    port := os.Getenv("PORT")
+	if port == "" {
+        port = "8080"
+	}
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("Hello, world!"))
+    })
+	go func() {
+		log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
+	}()
+
     // github
     topics := []string{"Selenium", "Docker", "Milvus"}
     daysList := []int{2, 7, 45} // List of timeframes to check
