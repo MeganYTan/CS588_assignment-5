@@ -76,7 +76,86 @@ type SearchResult struct {
 }
 
 
+func main() {
+    // db connection
+    connectionName := "assignment-5-406009:us-central1:mypostgres"
+	dbUser := "postgres"
+	dbPass := "root"
+	dbName := "assignment-5"
 
+	dbURI := fmt.Sprintf("host=%s dbname=%s user=%s password=%s sslmode=disable",
+		connectionName, dbName, dbUser, dbPass)
+
+	// Initialize the SQL DB handle
+	log.Println("Initializing database connection")
+	db, err := sql.Open("cloudsqlpostgres", dbURI)
+	if err != nil {
+		log.Fatalf("Error on initializing database connection: %s", err.Error())
+	}
+	defer db.Close()
+
+	//Test the database connection
+	log.Println("Testing database connection")
+	err = db.Ping()
+	if err != nil {
+		log.Fatalf("Error on database connection: %s", err.Error())
+	}
+	log.Println("Database connection established")
+
+	log.Println("Database query done!")
+
+	port := os.Getenv("PORT")
+	if port == "" {
+        port = "8080"
+	}
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+        w.Write([]byte("Hello, world!"))
+    })
+	go func() {
+		log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
+	}()
+
+   
+    // github
+    topics := []string{"Selenium", "Docker", "Milvus"}
+    daysList := []int{2, 7, 45} // List of timeframes to check
+
+    for _, days := range daysList {
+        log.Printf("Fetching issues for the past %d days\n", days)
+        for _, topic := range topics {
+            err := fetchAndStoreIssues(db, topic, days)
+            if err != nil {
+                log.Println(err)
+                continue
+            }
+        }
+    }
+
+    repos := []string{"prometheus/prometheus", "golang/go"}
+    for _, days := range daysList {
+        log.Printf("Fetching issues for the past %d days\n", days)
+        for _, repo := range repos {
+            issues, err := getRepoLastNDaysGitHubIssues(repo, days)
+            if err != nil {
+                log.Println(err)
+                continue
+            }
+
+            if len(issues) == 0 {
+                log.Printf("No new issues found for %s\n", repo)
+                continue
+            }
+
+            err = insertIssues(db, issues, days)
+            if err != nil {
+                log.Printf("Error inserting issues for %s into database: %v\n", repo, err)
+                continue
+            }
+
+            log.Printf("Successfully inserted %d issues for %s into the database.\n", len(issues), repo)
+        }
+    }
+}
 
 
 // getLastNDayGitHubIssues fetches issues related to a topic created in the last N days.
@@ -85,28 +164,28 @@ func getLastNDayGitHubIssues(topic string, days int) ([]GitHubIssue, error) {
     url := fmt.Sprintf("https://api.github.com/search/issues?q=%s+type:issue+created:>=%s", topic, since)
     req, err := http.NewRequest("GET", url, nil)
     if err != nil {
-        log.Println("error creating request: %v", err)
+        log.Printf("error creating request: %v", err)
         return nil, err
     }
     apiToken := "your_github_api_token"
     req.Header.Set("Authorization", "token " + apiToken)
     resp, err := http.DefaultClient.Do(req)
     if err != nil {
-        log.Println("error making the request: %v", err)
+        log.Printf("error making the request: %v", err)
         return nil, err
     }
     defer resp.Body.Close()
 
     body, err := ioutil.ReadAll(resp.Body)
     if err != nil {
-        log.Println("error reading the response: %v", err)
+        log.Printf("error reading the response: %v", err)
         return nil, err
     }
 
     var searchResult SearchResult
     err = json.Unmarshal(body, &searchResult)
     if err != nil {
-        log.Println("error decoding JSON: %v", err)
+        log.Printf("error decoding JSON: %v", err)
         return nil, err
     }
 
@@ -153,22 +232,22 @@ func insertIssues(db *sql.DB, issues []GitHubIssue, days int) error {
 func fetchAndStoreIssues(db *sql.DB, topic string, days int) error {
     issues, err := getLastNDayGitHubIssues(topic, days)
     if err != nil {
-        log.Println("error fetching issues for %s: %v", topic, err)
+        log.Printf("error fetching issues for %s: %v", topic, err)
         return err
     }
 
     if len(issues) == 0 {
-        log.Println("No new issues found for %s\n", topic)
+        log.Printf("No new issues found for %s\n", topic)
         return nil
     }
 
     err = insertIssues(db, issues, days)
     if err != nil {
-        log.Println("error inserting issues for %s into database: %v", topic, err)
+        log.Printf("error inserting issues for %s into database: %v", topic, err)
         return err
     }
 
-    log.Println("Successfully inserted %d issues for %s into the database.\n", len(issues), topic)
+    log.Printf("Successfully inserted %d issues for %s into the database.\n", len(issues), topic)
     return nil
 }
 
@@ -178,115 +257,23 @@ func getRepoLastNDaysGitHubIssues(repo string, days int) ([]GitHubIssue, error) 
 
     resp, err := http.Get(url)
     if err != nil {
-        log.Println("error making the request: %v", err)
+        log.Printf("error making the request: %v", err)
         return nil, err
     }
     defer resp.Body.Close()
 
     body, err := ioutil.ReadAll(resp.Body)
     if err != nil {
-        log.Println("error reading the response: %v", err)
+        log.Printf("error reading the response: %v", err)
         return nil, err
     }
 
     var searchResult SearchResult
     err = json.Unmarshal(body, &searchResult)
     if err != nil {
-        log.Println("error decoding JSON: %v", err)
+        log.Printf("error decoding JSON: %v", err)
         return nil, err
     }
 
     return searchResult.Items, nil
-}
-
-
-// DB
-// Function to open a connection to the PostgreSQL database
-func openDB() (*sql.DB, error) {
-    connectionName := "assignment-5-406009:us-central1:mypostgres"
-	dbUser := "postgres"
-	dbPass := "root"
-	dbName := "assignment_5"
-
-	dbURI := fmt.Sprintf("host=%s dbname=%s user=%s password=%s sslmode=disable",
-		connectionName, dbName, dbUser, dbPass)
-
-	// Initialize the SQL DB handle
-	log.Println("Initializing database connection")
-	db, err := sql.Open("cloudsqlpostgres", dbURI)
-	if err != nil {
-		log.Fatalf("Error on initializing database connection: %s", err.Error())
-        return nil, err
-	}
-	// defer db.Close()
-
-	//Test the database connection
-	log.Println("Testing database connection")
-	err = db.Ping()
-	if err != nil {
-		log.Fatalf("Error on database connection: %s", err.Error())
-        return nil, err
-	}
-	log.Println("Database connection established")
-
-	return db, nil
-}
-func main() {
-    // db connection
-    db, err := openDB()
-    if err != nil {
-        log.Fatalf("Error opening database: %v", err)
-    }
-    defer db.Close()
-
-    port := os.Getenv("PORT")
-	if port == "" {
-        port = "8080"
-	}
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-        w.Write([]byte("Hello, world!"))
-    })
-	go func() {
-		log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
-	}()
-
-    // github
-    topics := []string{"Selenium", "Docker", "Milvus"}
-    daysList := []int{2, 7, 45} // List of timeframes to check
-
-    for _, days := range daysList {
-        log.Println("Fetching issues for the past %d days\n", days)
-        for _, topic := range topics {
-            err := fetchAndStoreIssues(db, topic, days)
-            if err != nil {
-                log.Println(err)
-                continue
-            }
-        }
-    }
-
-    repos := []string{"prometheus/prometheus", "golang/go"}
-    for _, days := range daysList {
-        log.Println("Fetching issues for the past %d days\n", days)
-        for _, repo := range repos {
-            issues, err := getRepoLastNDaysGitHubIssues(repo, days)
-            if err != nil {
-                log.Println(err)
-                continue
-            }
-
-            if len(issues) == 0 {
-                log.Println("No new issues found for %s\n", repo)
-                continue
-            }
-
-            err = insertIssues(db, issues, days)
-            if err != nil {
-                log.Println("Error inserting issues for %s into database: %v\n", repo, err)
-                continue
-            }
-
-            log.Println("Successfully inserted %d issues for %s into the database.\n", len(issues), repo)
-        }
-    }
 }
