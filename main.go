@@ -88,7 +88,7 @@ func main() {
 
 	// Initialize the SQL DB handle
 	log.Println("Initializing database connection")
-	db, err := sql.Open("cloudsqlpostgres", dbURI)
+	db, err := sql.Open("postgres", dbURI)
 	if err != nil {
 		log.Fatalf("Error on initializing database connection: %s", err.Error())
 	}
@@ -108,6 +108,7 @@ func main() {
 	if port == "" {
         port = "8080"
 	}
+    port = "8080"
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
         w.Write([]byte("Hello, world!"))
     })
@@ -116,45 +117,45 @@ func main() {
 	}()
 
    
-    // github
-    topics := []string{"Selenium", "Docker", "Milvus"}
-    daysList := []int{2, 7, 45} // List of timeframes to check
+    // // github
+    // topics := []string{"Selenium", "Docker", "Milvus"}
+    // daysList := []int{2, 7, 45} // List of timeframes to check
 
-    for _, days := range daysList {
-        log.Printf("Fetching issues for the past %d days\n", days)
-        for _, topic := range topics {
-            err := fetchAndStoreIssues(db, topic, days)
-            if err != nil {
-                log.Println(err)
-                continue
-            }
-        }
-    }
+    // for _, days := range daysList {
+    //     log.Printf("Fetching issues for the past %d days\n", days)
+    //     for _, topic := range topics {
+    //         err := fetchAndStoreIssues(db, topic, days)
+    //         if err != nil {
+    //             log.Println(err)
+    //             continue
+    //         }
+    //     }
+    // }
 
-    repos := []string{"prometheus/prometheus", "golang/go"}
-    for _, days := range daysList {
-        log.Printf("Fetching issues for the past %d days\n", days)
-        for _, repo := range repos {
-            issues, err := getRepoLastNDaysGitHubIssues(repo, days)
-            if err != nil {
-                log.Println(err)
-                continue
-            }
+    // repos := []string{"prometheus/prometheus", "golang/go"}
+    // for _, days := range daysList {
+    //     log.Printf("Fetching issues for the past %d days\n", days)
+    //     for _, repo := range repos {
+    //         issues, err := getRepoLastNDaysGitHubIssues(repo, days)
+    //         if err != nil {
+    //             log.Println(err)
+    //             continue
+    //         }
 
-            if len(issues) == 0 {
-                log.Printf("No new issues found for %s\n", repo)
-                continue
-            }
+    //         if len(issues) == 0 {
+    //             log.Printf("No new issues found for %s\n", repo)
+    //             continue
+    //         }
 
-            err = insertIssues(db, issues, days)
-            if err != nil {
-                log.Printf("Error inserting issues for %s into database: %v\n", repo, err)
-                continue
-            }
+    //         err = insertIssues(db, issues, days)
+    //         if err != nil {
+    //             log.Printf("Error inserting issues for %s into database: %v\n", repo, err)
+    //             continue
+    //         }
 
-            log.Printf("Successfully inserted %d issues for %s into the database.\n", len(issues), repo)
-        }
-    }
+    //         log.Printf("Successfully inserted %d issues for %s into the database.\n", len(issues), repo)
+    //     }
+    // }
 }
 
 
