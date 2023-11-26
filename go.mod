@@ -1,4 +1,4 @@
-module assignment_5
+module main
 
 go 1.19
 
