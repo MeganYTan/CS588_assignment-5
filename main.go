@@ -1,15 +1,16 @@
 package main
 // go run main.go to run this
 import (
-    "encoding/json"
     "fmt"
-    "os"
+    "io/ioutil"
     "net/http"
     "time"
-    "io/ioutil"
+    "os"
     "log"
 	"database/sql"
+    "encoding/json"
     _ "github.com/lib/pq"
+    _ "github.com/GoogleCloudPlatform/cloudsql-proxy/proxy/dialers/postgres"
 )
 
 // GitHubIssue represents a single GitHub issue.
@@ -88,7 +89,7 @@ func main() {
 
 	// Initialize the SQL DB handle
 	log.Println("Initializing database connection")
-	db, err := sql.Open("postgres", dbURI)
+	db, err := sql.Open("cloudsqlpostgres", dbURI)
 	if err != nil {
 		log.Fatalf("Error on initializing database connection: %s", err.Error())
 	}

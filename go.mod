@@ -2,4 +2,7 @@ module assignment_5
 
 go 1.16
 
-require github.com/lib/pq v1.10.9
+require (
+	github.com/GoogleCloudPlatform/cloudsql-proxy v1.33.14
+	github.com/lib/pq v1.10.9
+)
