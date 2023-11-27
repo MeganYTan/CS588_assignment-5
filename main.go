@@ -12,7 +12,8 @@ import (
 	_ "github.com/lib/pq"
 	_ "github.com/GoogleCloudPlatform/cloudsql-proxy/proxy/dialers/postgres"
 )
-
+const baseURL string = "https://api.stackexchange.com/2.3"
+const stackApiKey string = "5tYPJGJ2XmHpHwDrZZ51nA(("
 // GitHubIssue represents a single GitHub issue.
 type GitHubIssue struct {
     URL           string    `json:"url"`
@@ -74,6 +75,23 @@ type Label struct {
 type SearchResult struct {
     TotalCount int            `json:"total_count"`
     Items      []GitHubIssue  `json:"items"`
+}
+
+// StackExchanges structs
+type Question struct {
+	QuestionID   int    `json:"question_id"`
+	Title        string `json:"title"`
+	CreationDate int64  `json:"creation_date"`
+}
+
+type Answer struct {
+	AnswerID     int    `json:"answer_id"`
+	QuestionID   int    `json:"question_id"`
+	CreationDate int64  `json:"creation_date"`
+}
+
+type StackExchangeResponse struct {
+	Items []Question `json:"items"`
 }
 func main() {
 
@@ -160,26 +178,161 @@ func main() {
         }
     }
 
-	// Spin in a loop and pull data from the city of chicago data portal
-	// Once every hour, day, week, etc.
-	// Though, please note that Not all datasets need to be pulled on daily basis
-	// fine-tune the following code-snippet as you see necessary
+	// stack overflow
+	tags := []string{"Selenium", "Docker", "Milvus", "Prometheus", "Go"}         // Example tag, change as needed
 	
+    for _, days := range daysList {
+        log.Printf("Fetching issues for the past %d days\n", days)
+        for _, tag := range tags {
+            err := fetchAndStoreStackOverflowData(db, tag, days)
+            if err != nil {
+                log.Println(err)
+                continue
+            }
+        }
+    }
+    // keeps server up
 	for {
-		// build and fine-tune functions to pull data from different data sources
-		// This is a code snippet to show you how to pull data from different data sources//.
 		log.Println("Inside For")
-
-		// Pull the data once a day
-		// You might need to pull Taxi Trips and COVID data on daily basis
-		// but not the unemployment dataset becasue its dataset doesn't change every day
 		time.Sleep(24 * time.Hour)
 	}
-
-	
-	
-
 }
+// stack overflow
+func getStackOverflowQuestionsLastNDays(tag string, days int) ([]Question, error) {
+    today := time.Now()
+    since := time.Now().AddDate(0, 0, -days).Format("2006-01-02")
+    url := fmt.Sprintf("%s/questions?fromdate=%d&todate=%d&order=desc&sort=activity&tagged=%s&site=stackoverflow&key=%s", baseURL, since, today, tag, stackApiKey)
+
+    resp, err := http.Get(url)
+    if err != nil {
+        log.Printf("error making the request: %v", err)
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    body, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        log.Printf("error reading the response: %v", err)
+        return nil, err
+    }
+
+    var searchResult StackExchangeResponse
+    err = json.Unmarshal(body, &searchResult)
+    if err != nil {
+        log.Printf("error decoding JSON: %v", err)
+        return nil, err
+    }
+
+    return searchResult.Items, nil
+}
+// func fetchQuestions(tag, apiKey string, fromDate, toDate time.Time) ([]map[string]interface{}, error) {
+// 	var questions []map[string]interface{}
+
+// 	url := fmt.Sprintf("%s/questions?fromdate=%d&todate=%d&order=desc&sort=activity&tagged=%s&site=stackoverflow&key=%s", baseURL, fromDate.Unix(), toDate.Unix(), tag, apiKey)
+// 	resp, err := http.Get(url)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	defer resp.Body.Close()
+// 	body, err := ioutil.ReadAll(resp.Body)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	var data StackExchangeResponse
+// 	json.Unmarshal(body, &data)
+// 	questions = append(questions, data.Items...)
+
+// 	time.Sleep(time.Second) // Respect rate limit
+
+// 	return questions, nil
+// }
+
+// func fetchAnswers(questionIds []int, apiKey string) ([]map[string]interface{}, error) {
+// 	var answers []map[string]interface{}
+
+// 	for _, id := range questionIds {
+// 		url := fmt.Sprintf("%s/questions/%d/answers?order=desc&sort=activity&site=stackoverflow&key=%s", baseURL, id, apiKey)
+// 		resp, err := http.Get(url)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+
+// 		defer resp.Body.Close()
+// 		body, err := ioutil.ReadAll(resp.Body)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+
+// 		var data StackExchangeResponse
+// 		json.Unmarshal(body, &data)
+// 		answers = append(answers, data.Items...)
+
+// 		time.Sleep(time.Second) // Respect rate limit
+// 	}
+
+// 	return answers, nil
+// }
+
+
+func insertStackoverflowQuestions(db *sql.DB, data []Question, days int) error {
+    tableName := fmt.Sprintf("stackoverflow_questions_%d", days)
+    dropTableSQL := fmt.Sprintf("DROP TABLE IF EXISTS %s;", tableName)
+    _, err := db.Exec(dropTableSQL)
+    if err != nil {
+        log.Printf("Error dropping table %s: %v", tableName, err)
+        return err
+    }
+
+    // Create the table
+    createTableSQL := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+		id SERIAL PRIMARY KEY,
+        owner_id INTEGER NOT NULL,
+		post_id INTEGER NOT NULL,
+		title TEXT,
+		creation_date TIMESTAMP
+	)`, tableName)
+    _, err = db.Exec(createTableSQL)
+    if err != nil {
+        log.Printf("Error creating table %s: %v", tableName, err)
+        return err
+    }
+
+
+	for _, item := range data {
+		query := fmt.Sprintf(`INSERT INTO %s (post_id, title, creation_date) VALUES ($1, $2, $3)`, tableName)
+		_, err := db.Exec(query, item.QuestionID, item.Title, item.CreationDate)
+		if err != nil {
+			log.Println("Error inserting data: ", err)
+		}
+	}
+    return nil
+}
+
+func fetchAndStoreStackOverflowData(db *sql.DB, topic string, days int) error {
+    questions, err := getStackOverflowQuestionsLastNDays(topic, days)
+    if err != nil {
+        log.Printf("error fetching questions for %s: %v", topic, err)
+        return err
+    }
+
+    if len(questions) == 0 {
+        log.Printf("No new issues found for %s\n", topic)
+        return nil
+    }
+
+    err = insertStackoverflowQuestions(db, questions, days)
+    if err != nil {
+        log.Printf("error inserting issues for %s into database: %v", topic, err)
+        return err
+    }
+
+    log.Printf("Successfully inserted %d questions for %s into the database.\n", len(questions), topic)
+    return nil
+    // then do answer
+}
+
 
 // getLastNDayGitHubIssues fetches issues related to a topic created in the last N days.
 func getLastNDayGitHubIssues(topic string, days int) ([]GitHubIssue, error) {
