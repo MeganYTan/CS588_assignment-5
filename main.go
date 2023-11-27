@@ -224,6 +224,33 @@ func getStackOverflowQuestionsLastNDays(tag string, days int) ([]Question, error
 
     return searchResult.Items, nil
 }
+func getStackOverflowAnswersLastNDays(tag string, days int) ([]Question, error) {
+    today := time.Now().Unix()
+    since := time.Now().AddDate(0, 0, -days).Unix()
+    url := fmt.Sprintf("%s/questions?fromdate=%d&todate=%d&order=desc&sort=activity&tagged=%s&site=stackoverflow&key=%s", baseURL, since, today, tag, stackApiKey)
+
+    resp, err := http.Get(url)
+    if err != nil {
+        log.Printf("error making the stackoverflow question api request: %v", err)
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    body, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        log.Printf("error reading the stackoverflow question api response: %v", err)
+        return nil, err
+    }
+
+    var searchResult StackExchangeResponse
+    err = json.Unmarshal(body, &searchResult)
+    if err != nil {
+        log.Printf("error decoding stackoverflow question api JSON: %v", err)
+        return nil, err
+    }
+
+    return searchResult.Items, nil
+}
 // func fetchQuestions(tag, apiKey string, fromDate, toDate time.Time) ([]map[string]interface{}, error) {
 // 	var questions []map[string]interface{}
 
@@ -291,7 +318,7 @@ func insertStackoverflowQuestions(db *sql.DB, data []Question, days int, tag str
 		post_id INTEGER NOT NULL,
         tag TEXT,
 		title TEXT,
-		creation_date TIMESTAMP
+		creation_date TEXT
 	)`, tableName)
     _, err = db.Exec(createTableSQL)
     if err != nil {
@@ -387,6 +414,7 @@ func insertIssues(db *sql.DB, issues []GitHubIssue, days int, topic string) erro
     CREATE TABLE %s (
         id SERIAL PRIMARY KEY,
         issue_id INT UNIQUE NOT NULL,
+        issue_number INT,
         topic TEXT,
         title TEXT NOT NULL,
         body TEXT,
