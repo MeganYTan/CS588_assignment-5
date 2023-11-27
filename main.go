@@ -168,7 +168,7 @@ func main() {
                 continue
             }
 
-            err = insertIssues(db, issues, days)
+            err = insertIssues(db, issues, days, repo)
             if err != nil {
                 log.Printf("Error inserting issues for %s into database: %v\n", repo, err)
                 continue
@@ -179,8 +179,7 @@ func main() {
     }
 
 	// stack overflow
-	tags := []string{"Selenium", "Docker", "Milvus", "Prometheus", "Go"}         // Example tag, change as needed
-	
+	tags := []string{"Selenium", "Docker", "Milvus", "Prometheus", "Go"}
     for _, days := range daysList {
         log.Printf("Fetching issues for the past %d days\n", days)
         for _, tag := range tags {
@@ -199,27 +198,27 @@ func main() {
 }
 // stack overflow
 func getStackOverflowQuestionsLastNDays(tag string, days int) ([]Question, error) {
-    today := time.Now()
-    since := time.Now().AddDate(0, 0, -days).Format("2006-01-02")
+    today := time.Now().Unix()
+    since := time.Now().AddDate(0, 0, -days).Unix()
     url := fmt.Sprintf("%s/questions?fromdate=%d&todate=%d&order=desc&sort=activity&tagged=%s&site=stackoverflow&key=%s", baseURL, since, today, tag, stackApiKey)
 
     resp, err := http.Get(url)
     if err != nil {
-        log.Printf("error making the request: %v", err)
+        log.Printf("error making the stackoverflow question api request: %v", err)
         return nil, err
     }
     defer resp.Body.Close()
 
     body, err := ioutil.ReadAll(resp.Body)
     if err != nil {
-        log.Printf("error reading the response: %v", err)
+        log.Printf("error reading the stackoverflow question api response: %v", err)
         return nil, err
     }
 
     var searchResult StackExchangeResponse
     err = json.Unmarshal(body, &searchResult)
     if err != nil {
-        log.Printf("error decoding JSON: %v", err)
+        log.Printf("error decoding stackoverflow question api JSON: %v", err)
         return nil, err
     }
 
@@ -276,7 +275,7 @@ func getStackOverflowQuestionsLastNDays(tag string, days int) ([]Question, error
 // }
 
 
-func insertStackoverflowQuestions(db *sql.DB, data []Question, days int) error {
+func insertStackoverflowQuestions(db *sql.DB, data []Question, days int, tag string) error {
     tableName := fmt.Sprintf("stackoverflow_questions_%d", days)
     dropTableSQL := fmt.Sprintf("DROP TABLE IF EXISTS %s;", tableName)
     _, err := db.Exec(dropTableSQL)
@@ -290,6 +289,7 @@ func insertStackoverflowQuestions(db *sql.DB, data []Question, days int) error {
 		id SERIAL PRIMARY KEY,
         owner_id INTEGER NOT NULL,
 		post_id INTEGER NOT NULL,
+        tag TEXT,
 		title TEXT,
 		creation_date TIMESTAMP
 	)`, tableName)
@@ -301,10 +301,10 @@ func insertStackoverflowQuestions(db *sql.DB, data []Question, days int) error {
 
 
 	for _, item := range data {
-		query := fmt.Sprintf(`INSERT INTO %s (post_id, title, creation_date) VALUES ($1, $2, $3)`, tableName)
-		_, err := db.Exec(query, item.QuestionID, item.Title, item.CreationDate)
+		query := fmt.Sprintf(`INSERT INTO %s (post_id, title, creation_date, tag) VALUES ($1, $2, $3, $4)`, tableName)
+		_, err := db.Exec(query, item.QuestionID, item.Title, item.CreationDate, tag)
 		if err != nil {
-			log.Println("Error inserting data: ", err)
+			log.Println("Error inserting stackoverflow questions data: ", err)
 		}
 	}
     return nil
@@ -322,15 +322,18 @@ func fetchAndStoreStackOverflowData(db *sql.DB, topic string, days int) error {
         return nil
     }
 
-    err = insertStackoverflowQuestions(db, questions, days)
+    err = insertStackoverflowQuestions(db, questions, days, topic)
     if err != nil {
         log.Printf("error inserting issues for %s into database: %v", topic, err)
         return err
     }
 
     log.Printf("Successfully inserted %d questions for %s into the database.\n", len(questions), topic)
+
+    // answers
+    
     return nil
-    // then do answer
+    
 }
 
 
@@ -369,7 +372,7 @@ func getLastNDayGitHubIssues(topic string, days int) ([]GitHubIssue, error) {
 }
 
 // Function to insert issues into the database
-func insertIssues(db *sql.DB, issues []GitHubIssue, days int) error {
+func insertIssues(db *sql.DB, issues []GitHubIssue, days int, topic string) error {
     tableName := fmt.Sprintf("github_issues_%d", days)
     // Drop the table if it exists
     dropTableSQL := fmt.Sprintf("DROP TABLE IF EXISTS %s;", tableName)
@@ -384,6 +387,7 @@ func insertIssues(db *sql.DB, issues []GitHubIssue, days int) error {
     CREATE TABLE %s (
         id SERIAL PRIMARY KEY,
         issue_id INT UNIQUE NOT NULL,
+        topic TEXT,
         title TEXT NOT NULL,
         body TEXT,
         created_at TIMESTAMP NOT NULL,
@@ -396,8 +400,8 @@ func insertIssues(db *sql.DB, issues []GitHubIssue, days int) error {
     }
 
     for _, issue := range issues {
-        _, err := db.Exec(fmt.Sprintf("INSERT INTO %s (issue_id, title, body, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)", tableName),
-            issue.ID, issue.Title, issue.Body, issue.CreatedAt, issue.UpdatedAt)
+        _, err := db.Exec(fmt.Sprintf("INSERT INTO %s (issue_id, issue_number, user_id, topic, title, body, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)", tableName),
+            issue.ID, issue.Number, issue.User.ID, topic, issue.Title, issue.Body, issue.CreatedAt, issue.UpdatedAt)
         if err != nil {
             return err
         }
@@ -417,13 +421,15 @@ func fetchAndStoreIssues(db *sql.DB, topic string, days int) error {
         return nil
     }
 
-    err = insertIssues(db, issues, days)
+    err = insertIssues(db, issues, days, topic)
     if err != nil {
         log.Printf("error inserting issues for %s into database: %v", topic, err)
         return err
     }
 
     log.Printf("Successfully inserted %d issues for %s into the database.\n", len(issues), topic)
+
+    // then do repo specific
     return nil
 }
 
