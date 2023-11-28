@@ -234,7 +234,7 @@ func getStackOverflowAnswersLastNDaysForQuestion(questionIds []int, days int) ([
 
     for _, id := range questionIds {
     // /2.3/questions/{ids}/answers?fromdate=%d&todate=%d&order=desc&sort=activity&site=stackoverflow&key=%s
-        url := fmt.Sprintf("%s/questions/%d/answers?fromdate=%d&todate=%d&order=desc&sort=activity&site=stackoverflow&key=%s", baseURL, id, since, today, stackApiKey)
+        url := fmt.Sprintf("%s/questions/%d/answers?fromdate=%d&todate=%d&order=desc&sort=activity&site=stackoverflow&key=%s", baseURL, id, since, today, stackApiK)
 
         resp, err := http.Get(url)
         if err != nil {
@@ -270,7 +270,7 @@ func insertStackoverflowQuestions(db *sql.DB, data []Question, days int, tag str
     }
 
     // Create the table
-    createTableSQL := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+    createTableSQL := fmt.Sprintf(`CREATE TABLE %s (
 		id SERIAL PRIMARY KEY,
         owner_id INTEGER NOT NULL,
 		post_id INTEGER NOT NULL,
@@ -305,7 +305,7 @@ func insertStackoverflowAnswers(db *sql.DB, data []Answer, days int, tag string)
     }
 
     // Create the table
-    createTableSQL := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+    createTableSQL := fmt.Sprintf(`CREATE TABLE %s (
 		id SERIAL PRIMARY KEY,
 		post_id INTEGER NOT NULL,
         tag TEXT,
@@ -424,8 +424,6 @@ func insertIssues(db *sql.DB, issues []GitHubIssue, days int, topic string) erro
     CREATE TABLE %s (
         id SERIAL PRIMARY KEY,
         issue_id INT UNIQUE NOT NULL,
-        issue_number INT,
-        topic TEXT,
         title TEXT NOT NULL,
         body TEXT,
         created_at TIMESTAMP NOT NULL,
@@ -436,14 +434,21 @@ func insertIssues(db *sql.DB, issues []GitHubIssue, days int, topic string) erro
         log.Printf("Error creating table %s: %v", tableName, err)
         return err
     }
-
     for _, issue := range issues {
-        _, err := db.Exec(fmt.Sprintf("INSERT INTO %s (issue_id, issue_number, user_id, topic, title, body, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)", tableName),
-            issue.ID, issue.Number, issue.User.ID, topic, issue.Title, issue.Body, issue.CreatedAt, issue.UpdatedAt)
+        _, err := db.Exec(fmt.Sprintf("INSERT INTO %s (issue_id, title, body, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)", tableName),
+            issue.ID, issue.Title, issue.Body, issue.CreatedAt, issue.UpdatedAt)
         if err != nil {
             return err
         }
     }
+    // for _, issue := range issues {
+    //     _, err := db.Exec(fmt.Sprintf("INSERT INTO %s (issue_id, issue_number, user_id, topic, title, body, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)", tableName),
+    //         issue.ID, issue.Number, issue.User.ID, topic, issue.Title, issue.Body, issue.CreatedAt, issue.UpdatedAt)
+    //     if err != nil {
+    //         log.Printf("Error inserting issue: %v", err)
+    //         return err
+    //     }
+    // }
     return nil
 }
 
@@ -467,7 +472,6 @@ func fetchAndStoreIssues(db *sql.DB, topic string, days int) error {
 
     log.Printf("Successfully inserted %d issues for %s into the github database.\n", len(issues), topic)
 
-    // then do repo specific
     return nil
 }
 
