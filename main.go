@@ -234,7 +234,7 @@ func getStackOverflowAnswersLastNDaysForQuestion(questionIds []int, days int) ([
 
     for _, id := range questionIds {
     // /2.3/questions/{ids}/answers?fromdate=%d&todate=%d&order=desc&sort=activity&site=stackoverflow&key=%s
-        url := fmt.Sprintf("%s/questions/%d/answers?fromdate=%d&todate=%d&order=desc&sort=activity&site=stackoverflow&key=%s", baseURL, id, since, today, stackApiK)
+        url := fmt.Sprintf("%s/questions/%d/answers?fromdate=%d&todate=%d&order=desc&sort=activity&site=stackoverflow&key=%s", baseURL, id, since, today, stackApiKey)
 
         resp, err := http.Get(url)
         if err != nil {
