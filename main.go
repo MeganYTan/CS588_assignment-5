@@ -9,12 +9,30 @@ import (
 	"log"
 	"database/sql"
 	"encoding/json"
+    "github.com/prometheus/client_golang/prometheus"
+    "github.com/prometheus/client_golang/prometheus/promhttp"
 	_ "github.com/lib/pq"
 	_ "github.com/GoogleCloudPlatform/cloudsql-proxy/proxy/dialers/postgres"
 )
+// stack overflow constants
 const baseURL string = "https://api.stackexchange.com/2.3"
 const stackApiKey string = "5tYPJGJ2XmHpHwDrZZ51nA(("
-// GitHubIssue represents a single GitHub issue.
+var (
+    apiCalls = prometheus.NewCounter(prometheus.CounterOpts{
+        Name: "api_calls_total",
+        Help: "Total number of API calls made to GitHub and Stackoverflow",
+    })
+    dataAmount = prometheus.NewCounter(prometheus.CounterOpts{
+        Name: "data_amount",
+        Help: "Total number of items collected from GitHub and Stackoverflow",
+    })
+)
+
+func init() {
+    prometheus.MustRegister(apiCalls)
+}
+
+// Github structs
 type GitHubIssue struct {
     URL           string    `json:"url"`
     RepositoryURL string    `json:"repository_url"`
@@ -39,7 +57,6 @@ type GitHubIssue struct {
     Body          string    `json:"body"`
 }
 
-// User represents a GitHub user.
 type User struct {
     Login             string `json:"login"`
     ID                int    `json:"id"`
@@ -61,7 +78,6 @@ type User struct {
     SiteAdmin         bool   `json:"site_admin"`
 }
 
-// Label represents a label assigned to an issue.
 type Label struct {
     ID      int    `json:"id"`
     NodeID  string `json:"node_id"`
@@ -71,7 +87,6 @@ type Label struct {
     Default bool   `json:"default"`
 }
 
-// SearchResult represents the GitHub API search result.
 type SearchResult struct {
     TotalCount int            `json:"total_count"`
     Items      []GitHubIssue  `json:"items"`
@@ -141,9 +156,14 @@ func main() {
 		log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
 	}()
 	
+    http.Handle("/metrics", promhttp.Handler()) // Expose the metrics
+    go makeAPICall()
+    log.Fatal(http.ListenAndServe(":8080", nil))
+
     // // github
     topics := []string{"Selenium", "Docker", "Milvus"}
-    daysList := []int{2, 7, 45} // List of timeframes to check
+    // Check last 2, 7, and 45 days
+    daysList := []int{2, 7, 45} 
 
     for _, days := range daysList {
         log.Printf("Fetching issues for the past %d days\n", days)
@@ -204,6 +224,7 @@ func getStackOverflowQuestionsLastNDays(tag string, days int) ([]Question, error
     today := time.Now().Unix()
     since := time.Now().AddDate(0, 0, -days).Unix()
     url := fmt.Sprintf("%s/questions?fromdate=%d&todate=%d&order=desc&sort=activity&tagged=%s&site=stackoverflow&key=%s", baseURL, since, today, tag, stackApiKey)
+    apiCalls.Inc()
 
     resp, err := http.Get(url)
     if err != nil {
@@ -233,9 +254,9 @@ func getStackOverflowAnswersLastNDaysForQuestion(questionIds []int, days int) ([
     var answers []Answer
 
     for _, id := range questionIds {
-    // /2.3/questions/{ids}/answers?fromdate=%d&todate=%d&order=desc&sort=activity&site=stackoverflow&key=%s
+        // /2.3/questions/{ids}/answers?fromdate=%d&todate=%d&order=desc&sort=activity&site=stackoverflow&key=%s
         url := fmt.Sprintf("%s/questions/%d/answers?fromdate=%d&todate=%d&order=desc&sort=activity&site=stackoverflow&key=%s", baseURL, id, since, today, stackApiKey)
-
+        apiCalls.Inc()
         resp, err := http.Get(url)
         if err != nil {
             log.Printf("error making the stackoverflow answer api request: %v", err)
@@ -374,10 +395,11 @@ func fetchAndStoreStackOverflowData(db *sql.DB, topic string, days int) error {
 }
 
 
-// getLastNDayGitHubIssues fetches issues related to a topic created in the last N days.
+// get GitHub issues for specific topics
 func getLastNDayGitHubIssues(topic string, days int) ([]GitHubIssue, error) {
     since := time.Now().AddDate(0, 0, -days).Format("2006-01-02")
     url := fmt.Sprintf("https://api.github.com/search/issues?q=%s+type:issue+created:>=%s", topic, since)
+    apiCalls.Inc()
     req, err := http.NewRequest("GET", url, nil)
     if err != nil {
         log.Printf("error creating request: %v", err)
@@ -408,7 +430,7 @@ func getLastNDayGitHubIssues(topic string, days int) ([]GitHubIssue, error) {
     return searchResult.Items, nil
 }
 
-// Function to insert issues into the database
+// inserts issues into the database
 func insertIssues(db *sql.DB, issues []GitHubIssue, days int, topic string) error {
     tableName := fmt.Sprintf("github_issues_%d", days)
     // Drop the table if it exists
@@ -424,6 +446,7 @@ func insertIssues(db *sql.DB, issues []GitHubIssue, days int, topic string) erro
     CREATE TABLE %s (
         id SERIAL PRIMARY KEY,
         issue_id INT UNIQUE NOT NULL,
+        topic TEXT,
         title TEXT NOT NULL,
         body TEXT,
         created_at TIMESTAMP NOT NULL,
@@ -435,8 +458,8 @@ func insertIssues(db *sql.DB, issues []GitHubIssue, days int, topic string) erro
         return err
     }
     for _, issue := range issues {
-        _, err := db.Exec(fmt.Sprintf("INSERT INTO %s (issue_id, title, body, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)", tableName),
-            issue.ID, issue.Title, issue.Body, issue.CreatedAt, issue.UpdatedAt)
+        _, err := db.Exec(fmt.Sprintf("INSERT INTO %s (issue_id, topic, title, body, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)", tableName),
+            issue.Number, topic, issue.Title, issue.Body, issue.CreatedAt, issue.UpdatedAt)
         if err != nil {
             return err
         }
@@ -452,6 +475,7 @@ func insertIssues(db *sql.DB, issues []GitHubIssue, days int, topic string) erro
     return nil
 }
 
+// fetch and stores the issues
 func fetchAndStoreIssues(db *sql.DB, topic string, days int) error {
     issues, err := getLastNDayGitHubIssues(topic, days)
     if err != nil {
@@ -475,10 +499,11 @@ func fetchAndStoreIssues(db *sql.DB, topic string, days int) error {
     return nil
 }
 
+// get issues for specific repos
 func getRepoLastNDaysGitHubIssues(repo string, days int) ([]GitHubIssue, error) {
     since := time.Now().AddDate(0, 0, -days).Format("2006-01-02")
     url := fmt.Sprintf("https://api.github.com/search/issues?q=repo:%s+type:issue+created:>=%s", repo, since)
-
+    apiCalls.Inc()
     resp, err := http.Get(url)
     if err != nil {
         log.Printf("error making the request: %v", err)
