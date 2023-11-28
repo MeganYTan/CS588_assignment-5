@@ -157,7 +157,7 @@ func main() {
 	}()
 	
     http.Handle("/metrics", promhttp.Handler()) // Expose the metrics
-    log.Fatal(http.ListenAndServe(":8080", nil))
+    log.Fatal(http.ListenAndServe(":9090", nil))
 
     // // github
     topics := []string{"Selenium", "Docker", "Milvus"}
