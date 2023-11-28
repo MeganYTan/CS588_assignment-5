@@ -146,7 +146,7 @@ func main() {
         port = "8080"
 	}
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-        w.Write([]byte("Hello, world!"))
+        w.Write([]byte("Hello, world! This is assignment 5!"))
     })
 	go func() {
 		log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), nil))
