@@ -157,7 +157,6 @@ func main() {
 	}()
 	
     http.Handle("/metrics", promhttp.Handler()) // Expose the metrics
-    go makeAPICall()
     log.Fatal(http.ListenAndServe(":8080", nil))
 
     // // github
