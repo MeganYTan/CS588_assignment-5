@@ -22,10 +22,6 @@ var (
         Name: "api_calls_total",
         Help: "Total number of API calls made to GitHub and Stackoverflow",
     })
-    dataAmount = prometheus.NewCounter(prometheus.CounterOpts{
-        Name: "data_amount",
-        Help: "Total number of items collected from GitHub and Stackoverflow",
-    })
 )
 
 func init() {
